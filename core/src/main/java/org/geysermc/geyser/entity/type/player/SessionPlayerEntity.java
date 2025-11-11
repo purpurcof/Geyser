@@ -43,6 +43,7 @@ import org.geysermc.geyser.entity.attribute.GeyserAttributeType;
 import org.geysermc.geyser.entity.type.BoatEntity;
 import org.geysermc.geyser.entity.type.Entity;
 import org.geysermc.geyser.entity.type.LivingEntity;
+import org.geysermc.geyser.input.InputLocksFlag;
 import org.geysermc.geyser.inventory.GeyserItemStack;
 import org.geysermc.geyser.item.Items;
 import org.geysermc.geyser.level.block.Blocks;
@@ -322,9 +323,9 @@ public class SessionPlayerEntity extends PlayerEntity {
     protected boolean hasShield(boolean offhand) {
         // Must be overridden to point to the player's inventory cache
         if (offhand) {
-            return session.getPlayerInventory().getOffhand().asItem() == Items.SHIELD;
+            return session.getPlayerInventory().getOffhand().is(Items.SHIELD);
         } else {
-            return session.getPlayerInventory().getItemInHand().asItem() == Items.SHIELD;
+            return session.getPlayerInventory().getItemInHand().is(Items.SHIELD);
         }
     }
 
@@ -398,6 +399,17 @@ public class SessionPlayerEntity extends PlayerEntity {
     }
 
     @Override
+    public void setLivingEntityFlags(ByteEntityMetadata entityMetadata) {
+        super.setLivingEntityFlags(entityMetadata);
+
+        // Forcefully update flags since we're not tracking thing like using item properly.
+        // For eg: when player start using item client-sided (and the USING_ITEM flag is false on geyser side)
+        // If the server disagree with the player using item state, it will send a metadata set USING_ITEM flag to false
+        // But since it never got set to true, nothing changed, causing the client to not receive the USING_ITEM flag they're supposed to.
+        this.forceFlagUpdate();
+    }
+
+    @Override
     public void resetMetadata() {
         super.resetMetadata();
 
@@ -465,6 +477,10 @@ public class SessionPlayerEntity extends PlayerEntity {
             this.vehicle.updateBedrockMetadata();
         }
 
+        // Bedrock player can dismount by pressing jump while Java cannot, so we need to prevent player from jumping to match vanilla behaviour.
+        this.session.setLockInput(InputLocksFlag.JUMP, entity != null && entity.doesJumpDismount());
+        this.session.updateInputLocks();
+
         super.setVehicle(entity);
     }
   
@@ -487,7 +503,7 @@ public class SessionPlayerEntity extends PlayerEntity {
         }
         Vector3i pos = getPosition().down(EntityDefinitions.PLAYER.offset()).toInt();
         BlockState state = session.getGeyser().getWorldManager().blockAt(session, pos);
-        if (session.getTagCache().is(BlockTag.CLIMBABLE, state.block())) {
+        if (state.block().is(session, BlockTag.CLIMBABLE)) {
             return true;
         }
 
@@ -528,7 +544,7 @@ public class SessionPlayerEntity extends PlayerEntity {
             }
 
             // Bedrock will NOT allow flight when not wearing an elytra; even if it doesn't have a glider component
-            if (entry.getKey() == EquipmentSlot.CHESTPLATE && !entry.getValue().asItem().equals(Items.ELYTRA)) {
+            if (entry.getKey() == EquipmentSlot.CHESTPLATE && !entry.getValue().is(Items.ELYTRA)) {
                 return false;
             }
         }
