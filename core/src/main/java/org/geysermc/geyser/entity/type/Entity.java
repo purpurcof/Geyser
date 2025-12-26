@@ -53,6 +53,7 @@ import org.geysermc.geyser.entity.properties.GeyserEntityPropertyManager;
 import org.geysermc.geyser.entity.properties.type.PropertyType;
 import org.geysermc.geyser.entity.type.living.MobEntity;
 import org.geysermc.geyser.entity.type.player.PlayerEntity;
+import org.geysermc.geyser.entity.vehicle.ClientVehicle;
 import org.geysermc.geyser.item.Items;
 import org.geysermc.geyser.item.type.Item;
 import org.geysermc.geyser.level.physics.BoundingBox;
@@ -70,6 +71,8 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.metadata.type.ByteEn
 import org.geysermc.mcprotocollib.protocol.data.game.entity.metadata.type.IntEntityMetadata;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.Hand;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.type.EntityType;
+import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponentTypes;
+import org.geysermc.mcprotocollib.protocol.data.game.item.component.Equippable;
 
 import java.util.Collections;
 import java.util.EnumMap;
@@ -258,6 +261,13 @@ public class Entity implements GeyserEntity {
     }
 
     public void moveRelative(double relX, double relY, double relZ, float yaw, float pitch, float headYaw, boolean isOnGround) {
+        if (this instanceof ClientVehicle clientVehicle) {
+            if (clientVehicle.isClientControlled()) {
+                return;
+            }
+            clientVehicle.getVehicleComponent().moveRelative(relX, relY, relZ);
+        }
+
         position = Vector3f.from(position.getX() + relX, position.getY() + relY, position.getZ() + relZ);
 
         MoveEntityDeltaPacket moveEntityPacket = new MoveEntityDeltaPacket();
@@ -789,9 +799,10 @@ public class Entity implements GeyserEntity {
             @Override
             public <T> void update(@NonNull GeyserEntityProperty<T> property, @Nullable T value) {
                 Objects.requireNonNull(property, "property must not be null!");
-                if (!(property instanceof PropertyType<T, ? extends EntityProperty> propertyType)) {
+                if (!(property instanceof PropertyType)) {
                     throw new IllegalArgumentException("Invalid property implementation! Got: " + property.getClass().getSimpleName());
                 }
+                PropertyType<T, ? extends EntityProperty> propertyType = (PropertyType<T, ?>) property;
                 int index = propertyDefinitions.getPropertyIndex(property.identifier().toString());
                 if (index < 0) {
                     throw new IllegalArgumentException("No property with the name " + property.identifier() + " has been registered.");
